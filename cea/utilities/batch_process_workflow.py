@@ -65,9 +65,6 @@ def exec_cea_commands(config, cea_scenario):
 
     optimization = config.batch_process_workflow.optimization
 
-    result_summary = config.batch_process_workflow.result_summary
-    result_analytics = config.batch_process_workflow.result_analytics
-
     # execute selected CEA commands
     if zone_csv_to_shp:
         zone_csv_path = os.path.join(cea_scenario, 'inputs/building-geometry/zone.csv')
@@ -175,15 +172,6 @@ def exec_cea_commands(config, cea_scenario):
         subprocess.run(['cea', 'optimization-new', '--scenario', cea_scenario], env=my_env, check=True,
                        capture_output=True)
 
-    if result_summary:
-        subprocess.run(['cea', 'result-summary', '--all-scenarios', 'false'], env=my_env, check=True,
-                       capture_output=True)
-
-    if result_analytics:
-        subprocess.run(['cea', 'result-summary', '--all-scenarios', 'false'], env=my_env, check=True,
-                       capture_output=True)
-
-
 
 def main(config):
     """
@@ -227,6 +215,14 @@ def main(config):
             if err_msg is not None:
                 print(err_msg.decode())
             raise e
+
+    # Read and summarise project results
+    project_result_summary = config.batch_process_workflow.result_summary
+    if project_result_summary and project_boolean:
+        subprocess.run(['cea', 'result-summary', '--all-scenarios', 'true'], env=my_env, check=True, capture_output=True)
+    elif project_result_summary and not project_boolean:
+        subprocess.run(['cea', 'result-summary', '--all-scenarios', 'false'], env=my_env, check=True, capture_output=True)
+
 
 
     # Print the time used for the entire processing
