@@ -1614,8 +1614,8 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
         pv_analytics_df = add_nominal_actual_and_coverage(pv_analytics_df)
 
         # Preserve the date_column for hourly or daily periods
-        if period in ['hourly', 'daily']:
-            pv_analytics_df[date_column] = period_groups[date_column].first()
+        # if period in ['hourly', 'daily']:
+        #     pv_analytics_df[date_column] = period_groups[date_column].first()
 
         # Drop temporary 'period_hour' column
         if 'period_hour' in pv_analytics_df.columns:
