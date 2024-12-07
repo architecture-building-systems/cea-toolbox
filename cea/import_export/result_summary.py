@@ -460,6 +460,8 @@ def map_analytics_and_cea_columns(input_list, direction="analytics_to_columns"):
         'PV_solar_energy_penetration[-]': ['E_PV_gen_kWh', 'PV_roofs_top_E_kWh', 'PV_walls_north_E_kWh', 'PV_walls_south_E_kWh', 'PV_walls_east_E_kWh', 'PV_walls_west_E_kWh'],
         'PV_self_consumption[-]': ['E_PV_gen_kWh', 'PV_roofs_top_E_kWh', 'PV_walls_north_E_kWh', 'PV_walls_south_E_kWh', 'PV_walls_east_E_kWh', 'PV_walls_west_E_kWh'],
         'PV_self_sufficiency[-]': ['E_PV_gen_kWh', 'PV_roofs_top_E_kWh', 'PV_walls_north_E_kWh', 'PV_walls_south_E_kWh', 'PV_walls_east_E_kWh', 'PV_walls_west_E_kWh'],
+        'PV_capacity_factor[-]': ['E_PV_gen_kWh', 'Area_PV_m2', 'PV_roofs_top_E_kWh', 'PV_walls_north_E_kWh', 'PV_walls_north_m2', 'PV_walls_south_E_kWh', 'PV_walls_south_m2', 'PV_walls_east_E_kWh', 'PV_walls_east_m2', 'PV_walls_west_E_kWh', 'PV_walls_west_m2'],
+
     }
 
     # Reverse the mapping if direction is "columns_to_metrics"
@@ -1494,7 +1496,7 @@ def serial_filter_buildings(config, locator):
 
 def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildings, list_selected_time_period, bool_aggregate_by_building, bool_use_acronym):
     list_pv_analytics = ['PV_solar_energy_penetration[-]', 'PV_self_consumption[-]', 'PV_self_sufficiency[-]',
-                         'PV_yield_carbon_intensity[tonCO2-eq/kWh]']
+                         'PV_yield_carbon_intensity[tonCO2-eq/kWh]', 'PV_capacity_factor[-]']
     list_demand_metrics = ['grid_electricity_consumption[kWh]']
     list_list_useful_cea_results_pv, list_appendix = exec_read_and_slice(hour_start, hour_end, locator, list_pv_analytics, list_buildings, bool_analytics=True)
     list_list_useful_cea_results_demand, _ = exec_read_and_slice(hour_start, hour_end, locator, list_demand_metrics, list_buildings)
@@ -1513,6 +1515,10 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
             return 'PV_total_' + pv_analytic
         if string.endswith('_E_kWh'):
             return string[:-5] + pv_analytic
+        if string.startswith('Area_PV_m2'):
+            return 'PV_total_' + pv_analytic
+        if string.endswith('_m2') and not string.startswith('Area_PV_m2'):
+            return string[:-2] + pv_analytic
         return string  # Return the string unchanged if condition not met
 
     def calc_pv_analytics_by_period(df_pv, df_demand, period, list_pv_analytics, bool_use_acronym, date_column='date'):
@@ -1588,6 +1594,10 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
                         pv_analytics_df['period'] = pv_analytic_df['period']
                     elif pv_analytic == 'self_sufficiency[-]':
                         pv_analytic_df = calc_self_sufficiency_by_period(df, col)
+                        pv_analytics_df[col_new] = pv_analytic_df[col]
+                        pv_analytics_df['period'] = pv_analytic_df['period']
+                    elif pv_analytic == 'capacity_factor[-]':
+                        pv_analytic_df = calc_capacity_factor_by_period(df, col)
                         pv_analytics_df[col_new] = pv_analytic_df[col]
                         pv_analytics_df['period'] = pv_analytic_df['period']
 
@@ -1758,6 +1768,22 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
             # Write to disk
             results_writer_time_period_building(locator, hour_start, hour_end, summary_folder, list_pv_analytics, list_list_df, [appendix], list_time_period, bool_analytics=True)
 
+
+def calc_solar_capacity_factor_by_period(locator, df, col, panel_type):
+
+    # Get the PV Data
+    pv_database_df = pd.read_excel(locator.get_database_conversion_systems(), sheet_name="PHOTOVOLTAIC_PANELS")
+    module = pv_database_df[pv_database_df["code"] == panel_type].iloc[0]
+
+    # Process the PV properties
+    module_capacity_kWp = module["capacity_Wp"] / 1000
+    module_area_m2 = module["module_area_m2"]
+    module_impact_kgco2m2 = module["module_embodied_kgco2m2"]
+
+    system_area_m2 = cea_result_pv_buildings_df['Area_PV_m2'].sum()
+    system_impact_kgco2 = module_impact_kgco2m2 * system_area_m2
+    n_modules = system_area_m2 / module_area_m2
+    max_kw = module_capacity_kWp * n_modules
 
 def calc_solar_energy_penetration_by_period(df, col):
     """
