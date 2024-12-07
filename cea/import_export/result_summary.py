@@ -1501,7 +1501,10 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
     list_list_useful_cea_results_pv, list_appendix = exec_read_and_slice(hour_start, hour_end, locator, list_pv_analytics, list_buildings, bool_analytics=True)
     list_list_useful_cea_results_demand, _ = exec_read_and_slice(hour_start, hour_end, locator, list_demand_metrics, list_buildings)
 
-    def replace_kwh_with_pv_analytic(string, pv_analytic):
+    # Remove 'PV_' in the strings appendix
+    list_panel_types = [item[3:] if item.startswith('pv_') else item for item in list_appendix]
+
+    def from_cea_column_to_pv_analytic(string, pv_analytic):
         """
         Replaces the end of a string with 'a' if it ends with '_kWh'.
 
@@ -1521,7 +1524,7 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
             return string[:-2] + pv_analytic
         return string  # Return the string unchanged if condition not met
 
-    def calc_pv_analytics_by_period(df_pv, df_demand, period, list_pv_analytics, bool_use_acronym, date_column='date'):
+    def calc_pv_analytics_by_period(df_pv, df_demand, period, list_pv_analytics, panel_type, bool_use_acronym, date_column='date'):
         """
         Calculates the three pv analytics for a given time period and
         adds 'hour_start' and 'hour_end' columns for group start and end hour information.
@@ -1583,23 +1586,25 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
                 continue
             else:
                 for pv_analytic in list_analytics:
-                    col_new = replace_kwh_with_pv_analytic(col, pv_analytic)
-                    if pv_analytic == 'solar_energy_penetration[-]':
-                        pv_analytic_df = calc_solar_energy_penetration_by_period(df, col)
-                        pv_analytics_df[col_new] = pv_analytic_df[col]
-                        pv_analytics_df['period'] = pv_analytic_df['period']
-                    elif pv_analytic == 'self_consumption[-]':
-                        pv_analytic_df = calc_self_consumption_by_period(df, col)
-                        pv_analytics_df[col_new] = pv_analytic_df[col]
-                        pv_analytics_df['period'] = pv_analytic_df['period']
-                    elif pv_analytic == 'self_sufficiency[-]':
-                        pv_analytic_df = calc_self_sufficiency_by_period(df, col)
-                        pv_analytics_df[col_new] = pv_analytic_df[col]
-                        pv_analytics_df['period'] = pv_analytic_df['period']
-                    elif pv_analytic == 'capacity_factor[-]':
-                        pv_analytic_df = calc_capacity_factor_by_period(df, col)
-                        pv_analytics_df[col_new] = pv_analytic_df[col]
-                        pv_analytics_df['period'] = pv_analytic_df['period']
+                    col_new = from_cea_column_to_pv_analytic(col, pv_analytic)
+                    if col.endswith("_E_kWh"):
+                        if pv_analytic == 'solar_energy_penetration[-]':
+                            pv_analytic_df = calc_solar_energy_penetration_by_period(df, col)
+                            pv_analytics_df[col_new] = pv_analytic_df[col]
+                            pv_analytics_df['period'] = pv_analytic_df['period']
+                        elif pv_analytic == 'self_consumption[-]':
+                            pv_analytic_df = calc_self_consumption_by_period(df, col)
+                            pv_analytics_df[col_new] = pv_analytic_df[col]
+                            pv_analytics_df['period'] = pv_analytic_df['period']
+                        elif pv_analytic == 'self_sufficiency[-]':
+                            pv_analytic_df = calc_self_sufficiency_by_period(df, col)
+                            pv_analytics_df[col_new] = pv_analytic_df[col]
+                            pv_analytics_df['period'] = pv_analytic_df['period']
+                    elif col.endswith("_m2"):
+                        if pv_analytic == 'capacity_factor[-]':
+                            pv_analytic_df = calc_solar_capacity_factor_by_period(locator, df, col, panel_type)
+                            pv_analytics_df[col_new] = pv_analytic_df[col]
+                            pv_analytics_df['period'] = pv_analytic_df['period']
 
         # Convert 'period_hour' to numeric (if it's not already)
         df['period_hour'] = pd.to_numeric(df['period_hour'], errors='coerce')
@@ -1643,22 +1648,23 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
     list_list_time_period = []
 
     # For the district
-    for list_useful_cea_results_pv in list_list_useful_cea_results_pv:
-        df_pv = aggregate_or_combine_dataframes(True, list_useful_cea_results_pv)   #hourly DataFrame for all selected buildings - pv
+    for pv_type in range(len(list_list_useful_cea_results_pv)):
+        df_pv = aggregate_or_combine_dataframes(True, list_list_useful_cea_results_pv[pv_type])   #hourly DataFrame for all selected buildings - pv
         df_demand = aggregate_or_combine_dataframes(bool_use_acronym, list_list_useful_cea_results_demand[0])   #hourly DataFrame for all selected buildings - demand
+        panel_type = list_panel_types[pv_type]
 
         list_df = []
         list_time_period = []
 
         if 'daily' in list_selected_time_period:
-            df_daily = calc_pv_analytics_by_period(df_pv, df_demand, 'daily', list_pv_analytics, bool_use_acronym, date_column='date')
+            df_daily = calc_pv_analytics_by_period(df_pv, df_demand, 'daily', list_pv_analytics, panel_type, bool_use_acronym, date_column='date')
             # Add coverage ratios, hours fall into the selected hours divided by the nominal hours of the period
             df_daily = add_nominal_actual_and_coverage(df_daily)
             list_df.append(df_daily)
             list_time_period.append('daily')
 
         if 'monthly' in list_selected_time_period:
-            df_monthly = calc_pv_analytics_by_period(df_pv, df_demand, 'monthly', list_pv_analytics, bool_use_acronym, date_column='date')
+            df_monthly = calc_pv_analytics_by_period(df_pv, df_demand, 'monthly', list_pv_analytics, panel_type, bool_use_acronym, date_column='date')
             if df_monthly is not None and not df_monthly.empty:
                 df_monthly = df_monthly[~(df_monthly['hour_start'].isnull() & df_monthly['hour_end'].isnull())]
             # Add coverage ratios, hours fall into the selected hours divided by the nominal hours of the period
@@ -1667,7 +1673,7 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
             list_time_period.append('monthly')
 
         if 'seasonally' in list_selected_time_period:
-            df_seasonally = calc_pv_analytics_by_period(df_pv, df_demand, 'seasonally', list_pv_analytics, bool_use_acronym, date_column='date')
+            df_seasonally = calc_pv_analytics_by_period(df_pv, df_demand, 'seasonally', list_pv_analytics, panel_type, bool_use_acronym, date_column='date')
             if df_seasonally is not None and not df_seasonally.empty:
                 df_seasonally = df_seasonally[~(df_seasonally['hour_start'].isnull() & df_seasonally['hour_end'].isnull())]  # Remove rows with both hour_start and hour_end empty
             # Add coverage ratios, hours fall into the selected hours divided by the nominal hours of the period
@@ -1676,7 +1682,7 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
             list_time_period.append('seasonally')
 
         if 'annually' in list_selected_time_period:
-            df_annually = calc_pv_analytics_by_period(df_pv, df_demand, 'annually', list_pv_analytics, bool_use_acronym, date_column='date')
+            df_annually = calc_pv_analytics_by_period(df_pv, df_demand, 'annually', list_pv_analytics, panel_type, bool_use_acronym, date_column='date')
             # Add coverage ratios, hours fall into the selected hours divided by the nominal hours of the period
             df_annually = add_nominal_actual_and_coverage(df_annually)
             list_df.append(df_annually)
@@ -1698,6 +1704,7 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
 
             appendix = list_appendix[pv_type]
             list_useful_cea_results_pv = list_list_useful_cea_results_pv[pv_type]
+            panel_type = list_panel_types[pv_type]
 
             annually_rows = []
             monthly_rows = []
@@ -1710,7 +1717,7 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
                 df_pv_cleaned = df_pv.drop(columns=[col for col in columns_to_drop if col in df_pv.columns], errors='ignore')
 
                 if 'monthly' in list_selected_time_period:
-                    df_monthly = calc_pv_analytics_by_period(df_pv_cleaned, df_demand, 'monthly', list_pv_analytics, not bool_use_acronym, date_column='date')
+                    df_monthly = calc_pv_analytics_by_period(df_pv_cleaned, df_demand, 'monthly', list_pv_analytics, panel_type, not bool_use_acronym, date_column='date')
                     if df_monthly is not None and not df_monthly.empty:
                         df_monthly = df_monthly[~(df_monthly['hour_start'].isnull() & df_monthly['hour_end'].isnull())]
                     # Add coverage ratios, hours fall into the selected hours divided by the nominal hours of the period
@@ -1718,7 +1725,7 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
                     monthly_rows.extend(df_monthly.reset_index(drop=True).to_dict(orient='records'))
 
                 if 'seasonally' in list_selected_time_period:
-                    df_seasonally = calc_pv_analytics_by_period(df_pv_cleaned, df_demand, 'seasonally', list_pv_analytics, not bool_use_acronym, date_column='date')
+                    df_seasonally = calc_pv_analytics_by_period(df_pv_cleaned, df_demand, 'seasonally', list_pv_analytics, panel_type, not bool_use_acronym, date_column='date')
                     if df_seasonally is not None and not df_seasonally.empty:
                         df_seasonally = df_seasonally[~(df_seasonally['hour_start'].isnull() & df_seasonally['hour_end'].isnull())]  # Remove rows with both hour_start and hour_end empty
                     # Add coverage ratios, hours fall into the selected hours divided by the nominal hours of the period
@@ -1726,7 +1733,7 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
                     seasonally_rows.extend(df_seasonally.reset_index(drop=True).to_dict(orient='records'))
 
                 if 'annually' in list_selected_time_period:
-                    df_annually = calc_pv_analytics_by_period(df_pv_cleaned, df_demand, 'annually', list_pv_analytics, not bool_use_acronym, date_column='date')
+                    df_annually = calc_pv_analytics_by_period(df_pv_cleaned, df_demand, 'annually', list_pv_analytics, panel_type, not bool_use_acronym, date_column='date')
                     # Add coverage ratios, hours fall into the selected hours divided by the nominal hours of the period
                     df_annually = add_nominal_actual_and_coverage(df_annually)
                     annually_rows.extend(df_annually.reset_index(drop=True).to_dict(orient='records'))
@@ -1784,6 +1791,19 @@ def calc_solar_capacity_factor_by_period(locator, df, col, panel_type):
     system_impact_kgco2 = module_impact_kgco2m2 * system_area_m2
     n_modules = system_area_m2 / module_area_m2
     max_kw = module_capacity_kWp * n_modules
+
+    # Group by the 'period' column and calculate the penetration ratio
+    grouped = df.groupby('period').apply(
+        lambda group: group[col].sum() / group['grid_electricity_consumption[kWh]'].sum()
+        if group['grid_electricity_consumption[kWh]'].sum() != 0 else 0
+    )
+
+    # Format the result into a new DataFrame
+    df_new = grouped.reset_index(name=col)
+    df_new[col] = df_new[col].round(2)  # Round to two decimal places
+
+    return df_new
+
 
 def calc_solar_energy_penetration_by_period(df, col):
     """
