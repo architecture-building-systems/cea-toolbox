@@ -62,11 +62,12 @@ class BuildingProperties(object):
 
         # reproject to projected coordinate system (in meters) to calculate area
         lat, lon = get_lat_lon_projected_shapefile(prop_geometry)
-        prop_geometry = prop_geometry.to_crs(get_projected_coordinate_system(float(lat), float(lon)))
+        target_crs = get_projected_coordinate_system(float(lat), float(lon))
+        prop_geometry = prop_geometry.to_crs(target_crs)
 
         prop_geometry['footprint'] = prop_geometry.area
         prop_geometry['perimeter'] = prop_geometry.length
-        prop_geometry['Blength'], prop_geometry['Bwidth'] = self.calc_bounding_box_geom(locator.get_zone_geometry())
+        prop_geometry['Blength'], prop_geometry['Bwidth'] = self.calc_bounding_box_geom(prop_geometry)
         prop_geometry = prop_geometry.drop('geometry', axis=1).set_index('Name')
         prop_hvac = dbf_to_dataframe(locator.get_building_air_conditioning())
 
@@ -112,18 +113,31 @@ class BuildingProperties(object):
         self._solar = solar
         self._prop_RC_model = prop_rc_model
 
-    def calc_bounding_box_geom(self, geometry_shapefile):
-        import shapefile
-        sf = shapefile.Reader(geometry_shapefile)
-        shapes = sf.shapes()
-        len_shapes = len(shapes)
+    def calc_bounding_box_geom(self, gdf):
+        """
+        Calculate bounding box dimensions (length and width) for each geometry in the GeoDataFrame.
+
+        Parameters:
+        - gdf (GeoDataFrame): A GeoDataFrame containing building geometries.
+
+        Returns:
+        - Tuple[List[float], List[float]]: Two lists, one for bounding box lengths and another for widths.
+        """
         bwidth = []
         blength = []
-        for shape in range(len_shapes):
-            bbox = shapes[shape].bbox
-            coords_bbox = [coord for coord in bbox]
-            delta1 = abs(coords_bbox[0] - coords_bbox[2])
-            delta2 = abs(coords_bbox[1] - coords_bbox[3])
+
+        for geom in gdf.geometry:
+            if geom.is_empty:
+                bwidth.append(0)
+                blength.append(0)
+                continue
+
+            # Get bounding box (xmin, ymin, xmax, ymax)
+            xmin, ymin, xmax, ymax = geom.bounds
+            delta1 = abs(xmax - xmin)  # Horizontal length
+            delta2 = abs(ymax - ymin)  # Vertical width
+
+            # Determine which is length and which is width
             if delta1 >= delta2:
                 bwidth.append(delta2)
                 blength.append(delta1)
