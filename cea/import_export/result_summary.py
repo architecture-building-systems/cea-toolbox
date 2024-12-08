@@ -1600,11 +1600,13 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
                             pv_analytic_df = calc_self_sufficiency_by_period(df, col)
                             pv_analytics_df[col_new] = pv_analytic_df[col]
                             pv_analytics_df['period'] = pv_analytic_df['period']
-                    elif col.endswith("_m2"):
                         if pv_analytic == 'capacity_factor[-]':
                             pv_analytic_df = calc_solar_capacity_factor_by_period(locator, df, col, panel_type)
                             pv_analytics_df[col_new] = pv_analytic_df[col]
                             pv_analytics_df['period'] = pv_analytic_df['period']
+                    elif col.endswith("_m2"):
+                        continue
+
 
         # Convert 'period_hour' to numeric (if it's not already)
         df['period_hour'] = pd.to_numeric(df['period_hour'], errors='coerce')
@@ -1787,6 +1789,9 @@ def calc_solar_capacity_factor_by_period(locator, df, col, panel_type):
     module_area_m2 = module["module_area_m2"]
     module_impact_kgco2m2 = module["module_embodied_kgco2m2"]
 
+    if col == 'E_PV_gen_kWh':
+        col_m2 = ''
+    col_m2 = col[:-5] + 'm2'
     system_area_m2 = cea_result_pv_buildings_df['Area_PV_m2'].sum()
     system_impact_kgco2 = module_impact_kgco2m2 * system_area_m2
     n_modules = system_area_m2 / module_area_m2
