@@ -460,7 +460,7 @@ def map_analytics_and_cea_columns(input_list, direction="analytics_to_columns"):
         'PV_solar_energy_penetration[-]': ['E_PV_gen_kWh', 'PV_roofs_top_E_kWh', 'PV_walls_north_E_kWh', 'PV_walls_south_E_kWh', 'PV_walls_east_E_kWh', 'PV_walls_west_E_kWh'],
         'PV_self_consumption[-]': ['E_PV_gen_kWh', 'PV_roofs_top_E_kWh', 'PV_walls_north_E_kWh', 'PV_walls_south_E_kWh', 'PV_walls_east_E_kWh', 'PV_walls_west_E_kWh'],
         'PV_self_sufficiency[-]': ['E_PV_gen_kWh', 'PV_roofs_top_E_kWh', 'PV_walls_north_E_kWh', 'PV_walls_south_E_kWh', 'PV_walls_east_E_kWh', 'PV_walls_west_E_kWh'],
-        'PV_capacity_factor[-]': ['E_PV_gen_kWh', 'Area_PV_m2', 'PV_roofs_top_E_kWh', 'PV_walls_north_E_kWh', 'PV_walls_north_m2', 'PV_walls_south_E_kWh', 'PV_walls_south_m2', 'PV_walls_east_E_kWh', 'PV_walls_east_m2', 'PV_walls_west_E_kWh', 'PV_walls_west_m2'],
+        'PV_capacity_factor[-]': ['E_PV_gen_kWh', 'Area_PV_m2', 'PV_roofs_top_E_kWh', 'PV_roofs_top_m2', 'PV_walls_north_E_kWh', 'PV_walls_north_m2', 'PV_walls_south_E_kWh', 'PV_walls_south_m2', 'PV_walls_east_E_kWh', 'PV_walls_east_m2', 'PV_walls_west_E_kWh', 'PV_walls_west_m2'],
 
     }
 
@@ -1604,9 +1604,12 @@ def calc_pv_analytics(locator, hour_start, hour_end, summary_folder, list_buildi
                             pv_analytic_df = calc_solar_capacity_factor_by_period(locator, df, col, panel_type)
                             pv_analytics_df[col_new] = pv_analytic_df[col]
                             pv_analytics_df['period'] = pv_analytic_df['period']
+                        # if pv_analytic == 'yield_carbon_intensity[tonCO2-eq/kWh]':
+                        #     pv_analytic_df = calc_solar_carbon_intensity_by_period(locator, df, col, panel_type)
+                        #     pv_analytics_df[col_new] = pv_analytic_df[col]
+                        #     pv_analytics_df['period'] = pv_analytic_df['period']
                     elif col.endswith("_m2"):
                         continue
-
 
         # Convert 'period_hour' to numeric (if it's not already)
         df['period_hour'] = pd.to_numeric(df['period_hour'], errors='coerce')
@@ -1787,20 +1790,17 @@ def calc_solar_capacity_factor_by_period(locator, df, col, panel_type):
     # Process the PV properties
     module_capacity_kWp = module["capacity_Wp"] / 1000
     module_area_m2 = module["module_area_m2"]
-    module_impact_kgco2m2 = module["module_embodied_kgco2m2"]
 
+    # Get the installed area from
     if col == 'E_PV_gen_kWh':
-        col_m2 = ''
-    col_m2 = col[:-5] + 'm2'
-    system_area_m2 = cea_result_pv_buildings_df['Area_PV_m2'].sum()
-    system_impact_kgco2 = module_impact_kgco2m2 * system_area_m2
-    n_modules = system_area_m2 / module_area_m2
-    max_kw = module_capacity_kWp * n_modules
+        col_m2 = 'Area_PV_m2'
+    else:
+        col_m2 = col[:-5] + 'm2'
 
-    # Group by the 'period' column and calculate the penetration ratio
+    # Group by the 'period' column and calculate the capacity factor
     grouped = df.groupby('period').apply(
-        lambda group: group[col].sum() / group['grid_electricity_consumption[kWh]'].sum()
-        if group['grid_electricity_consumption[kWh]'].sum() != 0 else 0
+        lambda group: group[col].sum() / (group[col_m2].sum() / module_area_m2 * module_capacity_kWp)
+        if group[col_m2].sum() != 0 else 0
     )
 
     # Format the result into a new DataFrame
