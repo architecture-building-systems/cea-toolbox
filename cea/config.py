@@ -561,6 +561,13 @@ class WeatherPathParameter(Parameter):
             weather_path = self.locator.get_weather(value)
         elif os.path.exists(value) and value.endswith('.epw'):
             weather_path = value
+        elif os.path.exists(value) and value.endswith('.dat'):
+            # if dat convert to epw
+            dat_weather_file = value
+            epw_weather_file = os.path.join(os.path.dirname(value), os.path.basename(value).replace('.dat', '.epw'))
+            from cea.datamanagement.weather_helper import parse_dat_weather_file
+            parse_dat_weather_file(dat_weather_file, epw_weather_file)
+            weather_path = epw_weather_file
         elif any(w.lower().startswith(value.lower()) for w in self.locator.get_weather_names()) and value.strip():
             # allow using shortcuts
             weather_path = self.locator.get_weather(
@@ -568,7 +575,7 @@ class WeatherPathParameter(Parameter):
         elif value in self.THIRD_PARTY_WEATHER_SOURCES:
             weather_path = value
         else:
-            raise cea.ConfigError(f"Invalid weather path: {value}")
+            raise cea.ConfigError(f"Invalid weather path: {value}. Supported formats: .epw, .dat")
         return weather_path
 
     @property

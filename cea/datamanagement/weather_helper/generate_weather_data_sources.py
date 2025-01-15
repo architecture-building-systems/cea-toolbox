@@ -22,7 +22,6 @@ URL_LIST = [
 
 WEATHER_DATA_LOCATION = os.path.join(os.path.realpath(os.path.dirname(__file__)), 'weather.geojson')
 
-
 def main():
     # Combine for global data
     excels = [pd.read_excel(url) for url in URL_LIST]

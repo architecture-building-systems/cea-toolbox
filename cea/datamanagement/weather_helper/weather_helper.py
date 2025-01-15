@@ -74,6 +74,47 @@ def copy_weather_file(source_weather_file, locator):
         source_weather_file=source_weather_file
     ))
 
+def parse_dat_weather_file(source_dat_file, output_epw_file):
+    """
+    convert a DWD .dat-file to a epw-file
+
+    :param string source_dat_file: source .dat
+    :param string output_epw_file: output EPW
+    """
+    import pandas as pd
+
+    print(f"Parsing .dat file: {source_dat_file}")
+    try:
+        weather_data = pd.read_csv(source_dat_file, sep="\s+", skiprows=6, header=None)
+        weather_data.columns = ['RW', 'HW', 'MM', 'DD', 'HH', 't', 'p', 'WR', 'WG', 'N', 'x', 'RF', 'B', 'D', 'A', 'E',
+                                'IL']
+
+        # from dat to epw
+        with open(output_epw_file, 'w') as epw_file:
+            epw_file.write("LOCATION,Weimar,-,DEU,SRC-TMYx,105550,50.983,11.317,1,268\n")
+            epw_file.write("DESIGN CONDITIONS,0\n")
+            epw_file.write("TYPICAL/EXTREME PERIODS,0\n")
+            epw_file.write("GROUND TEMPERATURES,0\n")
+            epw_file.write("HOLIDAYS/DAYLIGHT SAVINGS,No,0,0,0\n")
+            epw_file.write("COMMENTS 1, converted from .dat to .epw by CEA\n")
+            epw_file.write("COMMENTS 2\n")
+            epw_file.write("DATA PERIODS,1,1,Data,Tuesday,1/1,12/31\n")
+
+            for _, row in weather_data.iterrows():
+                mm = int(row['MM'])
+                dd = int(row['DD'])
+                hh = int(row['HH'])
+                epw_line = f"1958,{mm},{dd},{hh},60,B8E7B8B8?9?0?0?0?0?0?0B8B8B8B8?0?0F8F8A7E7, " \
+                           f"{row['t']},99,99,{row['RF']}, {row['p']}, 9999, {row['A']}, {row['D']}, {row['B']}, {row['D']}," \
+                           f"-9999, -9999, -9999, -9999,{row['WR']}, {row['WG']}, 99, 9999, 9999, 9999,0, 999999999,0," \
+                           f" -999,-999,-999\n"
+                epw_file.write(epw_line)
++    except pd.errors.EmptyDataError as e:
++        raise ValueError("The .dat file is empty or has incorrect format") from e
++    except pd.errors.ParserError as e:
++        raise ValueError("Failed to parse the .dat file - invalid format") from e
++    except Exception as e:
++        raise ValueError(f"Unexpected error while parsing .dat file: {str(e)}") from e
 
 def main(config):
     """
@@ -85,7 +126,13 @@ def main(config):
     locator = cea.inputlocator.InputLocator(config.scenario)
     weather = config.weather_helper.weather
 
-    if config.weather_helper.weather == 'climate.onebuilding.org':
+    if weather.endswith('.dat'):
+        print(f"Detected .dat file: {weather}")
+        # convert .dat in .epw
+        dat_weather_file = weather
+        epw_weather_file = locator.get_weather_file()
+        parse_dat_weather_file(dat_weather_file, epw_weather_file)
+    elif config.weather_helper.weather == 'climate.onebuilding.org':
         print("No weather provided, fetching from online sources.")
         fetch_weather_data(locator.get_weather_file(), locator.get_zone_geometry())
     else:
