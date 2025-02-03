@@ -236,9 +236,12 @@ def filter_low_potential(radiation_sensor_path, metadata_csv_path, config):
     """
 
     def f(x):
+        # To filter the sensor points / hours with low radiation potential.
         if x <= 50:
+            # eliminate points when hourly production < 50 W/m2
             return 0
         else:
+            # keep sensors above min radiation
             return x
 
     # read radiation file
@@ -393,9 +396,10 @@ def optimal_angle_and_tilt(sensors_metadata_clean, latitude, solar_properties, m
     #. Surface azimuth (orientation) of panels: If the sensor is on a tilted roof, the orientation of the panel is the
         same as the roof. Sensors on flat roofs are all south facing.
     """
+
     # calculate panel tilt angle (B) for flat roofs (tilt < 5 degrees), slope roofs and walls.
-    optimal_angle_flat_rad = calc_optimal_angle(180, latitude,
-                                                solar_properties.trr_mean)  # assume surface azimuth = 180 (N,E), south facing
+    optimal_angle_flat_rad = calc_optimal_angle(0, latitude, solar_properties.trr_mean)
+        # assume panels face the equator (the results for surface azimuth = 0 or 180 are the same)
     sensors_metadata_clean['tilt_deg'] = np.vectorize(acos)(sensors_metadata_clean['Zdir'])  # surface tilt angle in rad
     sensors_metadata_clean['tilt_deg'] = np.vectorize(degrees)(
         sensors_metadata_clean['tilt_deg'])  # surface tilt angle in degrees
@@ -522,7 +526,7 @@ def calc_categoriesroof(teta_z, B, GB, Max_Isol):
     else:
         CATteta_z = 6
     B = degrees(B)
-    if 0 < B <= 5:
+    if 0 <= B <= 5:
         CATB = 1  # flat roof
     elif 5 < B <= 15:
         CATB = 2  # tilted 5-15 degrees
@@ -627,8 +631,12 @@ def calc_surface_azimuth(xdir, ydir, B):
 
     """
     B = radians(B)
-    teta_z = degrees(asin(xdir / sin(B)))
-    # set the surface azimuth with on the sing convention (E,N)=(+,+)
+    if B != 0:
+        teta_z = degrees(asin(xdir / sin(B))) # surface azimuth before adjusting for sign convention
+    else:
+        # for flat panels, surface azimuth doesn't matter
+        teta_z = 0
+    # set the surface azimuth with on the sign convention (E,N)=(+,+)
     if xdir < 0:
         if ydir < 0:
             surface_azimuth = 180 + teta_z  # (xdir,ydir) = (-,-)
@@ -772,7 +780,7 @@ def calc_worst_hour(latitude, weather_data, solar_window_solstice):
     return worst_hour
 
 
-def cal_radiation_type(group, hourly_radiation, weather_data):
+def calc_radiation_type(group, hourly_radiation, weather_data):
     radiation_Wperm2 = pd.DataFrame({'I_sol': hourly_radiation[group]})
     radiation_Wperm2['I_diffuse'] = weather_data.ratio_diffhout * radiation_Wperm2.I_sol  # calculate diffuse radiation
     radiation_Wperm2['I_direct'] = radiation_Wperm2['I_sol'] - radiation_Wperm2[

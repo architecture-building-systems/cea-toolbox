@@ -13,13 +13,14 @@ import numpy as np
 import pandas as pd
 from geopandas import GeoDataFrame as gdf
 from numba import jit
+import pvlib
 
 import cea.inputlocator
 import cea.utilities.parallel
 import cea.utilities.workerstream
 from cea.constants import HOURS_IN_YEAR
 from cea.technologies.solar import constants
-from cea.technologies.solar.photovoltaic import (calc_properties_PV_db, calc_PV_power, calc_diffuseground_comp,
+from cea.technologies.solar.photovoltaic import (get_properties_PV_db, calc_PV_power, calc_diffuseground_comp,
                                                  calc_absorbed_radiation_PV, calc_cell_temperature)
 from cea.technologies.solar.solar_collector import (calc_properties_SC_db, calc_IAM_beam_SC, calc_q_rad, calc_q_gain,
                                                     vectorize_calc_Eaux_SC, calc_optimal_mass_flow,
@@ -73,7 +74,7 @@ def calc_PVT(locator, config, latitude, longitude, weather_data, date_local, bui
     print('calculating solar properties done for building %s' % building_name)
 
     # get properties of the panel to evaluate # TODO: find a PVT module reference
-    panel_properties_PV = calc_properties_PV_db(locator.get_database_conversion_systems(), config)
+    panel_properties_PV = get_properties_PV_db(locator.get_database_conversion_systems(), config)
     panel_properties_SC = calc_properties_SC_db(locator.get_database_conversion_systems(), config)
     print('gathering properties of PVT collector panel for building %s' % building_name)
 
@@ -174,11 +175,17 @@ def calc_PVT_generation(sensor_groups, weather_data, date_local, solar_propertie
         'hourlydata_groups']  # mean hourly radiation of sensors in each group [Wh/m2]
     T_in_C = get_t_in_pvt(config)
 
+    # Adjust sign convention: in Duffie (2013) collector azimuth facing equator = 0◦ (p. xxxiii)
+    if latitude >= 0:
+        Az = solar_properties.Az - 180  # south is 0°, east is negative and west is positive (p. 13)
+    else:
+        Az = solar_properties.Az  # north is 0°
+
     # convert degree to radians
-    lat_rad = radians(latitude)
-    g_rad = np.radians(solar_properties.g)
-    ha_rad = np.radians(solar_properties.ha)
     Sz_rad = np.radians(solar_properties.Sz)
+    # lat_rad = radians(latitude)
+    # g_rad = np.radians(solar_properties.g)
+    # ha_rad = np.radians(solar_properties.ha)
 
     # calculate equivalent length of pipes
     total_area_module_m2 = prop_observers['area_installed_module_m2'].sum()  # total area for panel installation
@@ -220,11 +227,13 @@ def calc_PVT_generation(sensor_groups, weather_data, date_local, solar_propertie
         teta_z_rad = radians(teta_z_deg)  # surface azimuth
 
         # calculate radiation types (direct/diffuse) in group
-        radiation_Wperm2 = solar_equations.cal_radiation_type(group, hourly_radiation_Wperm2, weather_data)
+        radiation_Wperm2 = solar_equations.calc_radiation_type(group, hourly_radiation_Wperm2, weather_data)
 
         ## calculate absorbed solar irradiation on tilt surfaces
-        # calculate effective indicent angles necessary
-        teta_rad = np.vectorize(solar_equations.calc_angle_of_incidence)(g_rad, lat_rad, ha_rad, tilt_rad, teta_z_rad)
+        # calculate effective incident angles necessary
+        teta_deg = pvlib.irradiance.aoi(tilt_angle_deg, teta_z_deg, solar_properties.Sz, Az)
+        teta_rad = [radians(x) for x in teta_deg]
+
         teta_ed_rad, teta_eg_rad = calc_diffuseground_comp(tilt_rad)
 
         # absorbed radiation and Tcell

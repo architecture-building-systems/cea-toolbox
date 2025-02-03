@@ -1,6 +1,10 @@
 
 """
 Parameters used for solar technologies
+
+:References: Duffie, J. A. and Beckman, W. A. (2013) Radiation Transmission through Glazing: Absorbed Radiation, in
+             Solar Engineering of Thermal Processes, Fourth Edition, John Wiley & Sons, Inc., Hoboken, NJ, USA.
+             doi: 10.1002/9781118671603.ch5
 """
 
 
@@ -15,7 +19,7 @@ k_msc_max_WpermK = 0.217
 
 # glazing properties for PV
 n = 1.526  # refractive index of glass
-K = 0.4  # glazing extinction coefficient
+K = 4  # glazing extinction coefficient
 
 # environmental properties
 Pg = 0.2  # ground reflectance

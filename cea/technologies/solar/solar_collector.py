@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 from geopandas import GeoDataFrame as gdf
 from numba import jit
+import pvlib
 
 import cea.config
 import cea.inputlocator
@@ -203,7 +204,7 @@ def calc_SC_generation(sensor_groups, weather_data, date_local, solar_properties
 
     for group in range(number_groups):
         # calculate radiation types (direct/diffuse) in group
-        radiation_Wperm2 = solar_equations.cal_radiation_type(group, hourly_radiation, weather_data)
+        radiation_Wperm2 = solar_equations.calc_radiation_type(group, hourly_radiation, weather_data)
 
         # load panel angles from each group
         teta_z_deg = prop_observers.loc[group, 'surface_azimuth_deg']  # azimuth of panels of group
@@ -305,7 +306,7 @@ def calc_SC_module(config, radiation_Wperm2, panel_properties, Tamb_vector_C, IA
     :type panel_properties: dict
     :param Tamb_vector_C: ambient temperatures
     :type Tamb_vector_C: Series
-    :param IAM_b: indicent andgle modifiers for direct(beam) radiation
+    :param IAM_b: incident andgle modifiers for direct(beam) radiation
     :type IAM_b: ndarray
     :param tilt_angle_deg: panel tilt angle
     :type tilt_angle_deg: float
@@ -760,17 +761,20 @@ def calc_IAM_beam_SC(solar_properties, teta_z_deg, tilt_angle_deg, type_SCpanel,
             IAM_b = IAMT * IAML  # overall incidence angle modifier for beam radiation
         return IAM_b
 
+    # Adjust sign convention: in Duffie (2013) collector azimuth facing equator = 0◦ (p. xxxiii)
+    if latitude_deg >= 0:
+        Az = solar_properties.Az - 180  # south is 0°, east is negative and west is positive (p. 13)
+    else:
+        Az = solar_properties.Az  # north is 0°
+
     # convert to radians
-    g_rad = np.radians(solar_properties.g)  # declination [rad]
-    ha_rad = np.radians(solar_properties.ha)  # hour angle [rad]
     Sz_rad = np.radians(solar_properties.Sz)  # solar zenith angle
-    Az_rad = np.radians(solar_properties.Az)  # solar azimuth angle [rad]
-    lat_rad = radians(latitude_deg)
+    Az_rad = np.radians(Az)  # solar_properties.Az)  # solar azimuth angle [rad]
     teta_z_rad = radians(teta_z_deg)
     tilt_rad = radians(tilt_angle_deg)
 
-    incidence_angle_rad = np.vectorize(solar_equations.calc_incident_angle_beam)(g_rad, lat_rad, ha_rad, tilt_rad,
-                                                                                 teta_z_rad)  # incident angle in radians
+    incidence_angle_deg = pvlib.irradiance.aoi(tilt_angle_deg, teta_z_deg, solar_properties.Sz, Az)
+    incidence_angle_rad = [radians(x) for x in incidence_angle_deg]  # incident angle in radians
 
     # calculate incident angles
     if type_SCpanel == 'FP':
