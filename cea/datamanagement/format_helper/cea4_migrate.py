@@ -200,7 +200,7 @@ def verify_file_exists_3(scenario, items):
     return list_missing_files
 
 
-def migrate_dbf_to_csv(scenario, item, required_columns):
+def migrate_dbf_to_csv(scenario, item, required_columns, verbose=False):
     """
     Migrate a DBF file to CSV format with column renaming.
 
@@ -223,24 +223,19 @@ def migrate_dbf_to_csv(scenario, item, required_columns):
                 df.rename(columns=columns_mapping_dict_typology, inplace=True)
                 df.to_csv(path_to_input_file_without_db_4(scenario, item), index=False)
                 os.remove(path_to_input_file_without_db_3(scenario, item))
-                print(f'+ {item}.dbf has been migrated from CEA-3 to CEA-4 format.')
+                if verbose:
+                    print(f'- {item}.dbf has been migrated from CEA-3 to CEA-4 format.')
 
 ## --------------------------------------------------------------------------------------------------------------------
 ## Migrate to CEA-4 format from CEA-3 format
 ## --------------------------------------------------------------------------------------------------------------------
 
-def migrate_cea3_to_cea4(scenario):
+def migrate_cea3_to_cea4(scenario, verbose=False):
 
     #0. verify if everything is already in the correct format for CEA-4
     dict_missing = cea4_verify(scenario)
     if all(not value for value in dict_missing.values()):
         pass
-        # print("✓" * 3)
-        # print('All inputs are verified as present and compatible with the current version of CEA-4 for Scenario: {scenario}, including:'.format(scenario=scenario_name),
-        #       'input building-geometries ShapeFiles: [zone and surroundings], '
-        #       'input building-properties .csv files: {csv_building_properties}.'.format(csv_building_properties=CSV_BUILDING_PROPERTIES_4),
-        #       )
-        # print("-" * 1 + ' Scenario: {scenario} - end '.format(scenario=scenario_name) + "-" * 50)
 
     else:
         # Verify missing files for CEA-3 and CEA-4 formats
@@ -275,24 +270,25 @@ def migrate_cea3_to_cea4(scenario):
                         zone_df_4.drop(columns=['Name'], inplace=True)
                         zone_df_4 = zone_df_4[COLUMNS_ZONE_4]
                         replace_shapefile_dbf(scenario, 'zone', zone_df_4, COLUMNS_ZONE_3)
-                        print('+ zone.shp and typology.dbf have been merged and migrated to CEA-4 format.')
+                        if verbose:
+                            print('- zone.shp and typology.dbf have been merged and migrated to CEA-4 format.')
                     else:
-                        raise ValueError('+ typology.dbf exists but does not follow the CEA-3 format. CEA cannot proceed with the data migration. '
-                                         'Check the following column(s) for CEA-3 format: {list_missing_attributes_typology_3}'.format(list_missing_attributes_typology_3=list_missing_attributes_typology_3)
+                        raise ValueError('! typology.dbf exists but does not follow the CEA-3 format. CEA cannot proceed with the data migration. '
+                                         'Check the following column(s) for CEA-3 format: {list_missing_attributes_typology_3}.'.format(list_missing_attributes_typology_3=list_missing_attributes_typology_3)
                                          )
                 else:
-                    print("+ CEA is unable to produce a zone.shp compatible to CEA-4 format. To enable the migration, ensure typology.dbf is present in building-properties folder for CEA-3 format.")
+                    print("! CEA is unable to produce a zone.shp compatible to CEA-4 format. To enable the migration, ensure typology.dbf (CEA-3 format) is present in building-properties folder.")
 
             elif list_missing_attributes_zone_3 and not list_missing_attributes_zone_4:
                 pass
                 # print('For Scenario: {scenario}, '.format(scenario=scenario_name), 'zone.shp already follows the CEA-4 format.')
             else:
-                raise ValueError('+ zone.shp exists but follows neither the CEA-3 nor CEA-4 format. CEA cannot proceed with the data migration.'
+                raise ValueError('! zone.shp exists but follows neither the CEA-3 nor CEA-4 format. CEA cannot proceed with the data migration.'
                                  'Check the following column(s) for CEA-3 format: {list_missing_attributes_zone_3}.'.format(list_missing_attributes_zone_3=list_missing_attributes_zone_3),
                                  'Check the following column(s) for CEA-4 format: {list_missing_attributes_zone_4}.'.format(list_missing_attributes_zone_4=list_missing_attributes_zone_4)
                                  )
         else:
-            print("! Ensure zone.shp is present in building-geometry folder.")
+            print("! Ensure zone.shp (CEA-3 format) is present in building-geometry folder.")
 
         if 'surroundings' not in list_missing_files_shp_building_geometry_4:
             list_missing_attributes_surroundings_3 = verify_shp(scenario, 'surroundings', COLUMNS_SURROUNDINGS_3)
@@ -301,7 +297,8 @@ def migrate_cea3_to_cea4(scenario):
                 surroundings_df = gpd.read_file(path_to_input_file_without_db_3(scenario, 'surroundings'))
                 surroundings_df.rename(columns=columns_mapping_dict_name, inplace=True)
                 replace_shapefile_dbf(scenario, 'surroundings', surroundings_df, COLUMNS_SURROUNDINGS_3)
-                print('+ surroundings.shp has been migrated from CEA-3 to CEA-4 format.')
+                if verbose:
+                    print('- surroundings.shp has been migrated from CEA-3 to CEA-4 format.')
 
             elif list_missing_attributes_surroundings_3 and not list_missing_attributes_surroundings_4:
                 pass
@@ -312,12 +309,12 @@ def migrate_cea3_to_cea4(scenario):
                                  'Check the following column(s) for CEA-4 format: {list_missing_attributes_surroundings_4}.'.format(list_missing_attributes_surroundings_4=list_missing_attributes_surroundings_4)
                                  )
         else:
-            print('! (optional) Run Surroundings Helper to generate surroundings.shp.')
+            print('! (optional) Run Surroundings Helper to generate surroundings.shp after the data migration.')
 
         #2. about the .dbf files in the building-properties folder to be migrated to .csv files
         if 'air_conditioning' in list_missing_files_csv_building_properties_4 and not list_missing_columns_air_conditioning_4:
             if 'air_conditioning' not in list_missing_files_dbf_building_properties_3:
-                migrate_dbf_to_csv(scenario, 'air_conditioning', COLUMNS_AIR_CONDITIONING_3)
+                migrate_dbf_to_csv(scenario, 'air_conditioning', COLUMNS_AIR_CONDITIONING_3, verbose=verbose)
             else:
                 print("! Ensure either air_conditioning.dbf or air_conditioning.csv is present in building-properties folder. Run Archetypes-Helper to generate air_conditioning.csv.")
         elif 'air_conditioning' not in list_missing_files_csv_building_properties_4 and list_missing_columns_air_conditioning_4:
@@ -327,7 +324,7 @@ def migrate_cea3_to_cea4(scenario):
 
         if 'architecture' in list_missing_files_csv_building_properties_4 and not list_missing_columns_architecture_4:
             if 'architecture' not in list_missing_files_dbf_building_properties_3:
-                migrate_dbf_to_csv(scenario, 'architecture', COLUMNS_ARCHITECTURE_3)
+                migrate_dbf_to_csv(scenario, 'architecture', COLUMNS_ARCHITECTURE_3, verbose=verbose)
             else:
                 print("! Ensure either architecture.dbf or architecture.csv is present in building-properties folder. Run Archetypes-Helper to generate architecture.csv.")
         elif 'architecture' not in list_missing_files_csv_building_properties_4 and list_missing_columns_architecture_4:
@@ -337,7 +334,7 @@ def migrate_cea3_to_cea4(scenario):
 
         if 'indoor_comfort' in list_missing_files_csv_building_properties_4 and not list_missing_columns_indoor_comfort_4:
             if 'indoor_comfort' not in list_missing_files_dbf_building_properties_3:
-                migrate_dbf_to_csv(scenario, 'indoor_comfort', COLUMNS_INDOOR_COMFORT_3)
+                migrate_dbf_to_csv(scenario, 'indoor_comfort', COLUMNS_INDOOR_COMFORT_3, verbose=verbose)
             else:
                 print("! Ensure either indoor_comfort.dbf or indoor_comfort.csv is present in building-properties folder. Run Archetypes-Helper to generate indoor_comfort.csv.")
         elif 'indoor_comfort' not in list_missing_files_csv_building_properties_4 and list_missing_columns_indoor_comfort_4:
@@ -347,7 +344,7 @@ def migrate_cea3_to_cea4(scenario):
 
         if 'internal_loads' in list_missing_files_csv_building_properties_4 and not list_missing_columns_internal_loads_4:
             if 'internal_loads' not in list_missing_files_dbf_building_properties_3:
-                migrate_dbf_to_csv(scenario, 'internal_loads', COLUMNS_INTERNAL_LOADS_3)
+                migrate_dbf_to_csv(scenario, 'internal_loads', COLUMNS_INTERNAL_LOADS_3, verbose=verbose)
             else:
                 print("! Ensure either internal_loads.dbf or internal_loads.csv is present in building-properties folder. Run Archetypes-Helper to generate internal_loads.csv.")
         elif 'internal_loads' not in list_missing_files_csv_building_properties_4 and list_missing_columns_internal_loads_4:
@@ -357,7 +354,7 @@ def migrate_cea3_to_cea4(scenario):
 
         if 'supply_systems' in list_missing_files_csv_building_properties_4 and not list_missing_columns_supply_systems_4:
             if 'supply_systems' not in list_missing_files_dbf_building_properties_3:
-                migrate_dbf_to_csv(scenario, 'supply_systems', COLUMNS_SUPPLY_SYSTEMS_3)
+                migrate_dbf_to_csv(scenario, 'supply_systems', COLUMNS_SUPPLY_SYSTEMS_3, verbose=verbose)
             else:
                 print("! Ensure either supply_systems.dbf or supply_systems.csv is present in building-properties folder. Run Archetypes-Helper to generate supply_systems.csv.")
         elif 'supply_systems' not in list_missing_files_csv_building_properties_4 and list_missing_columns_supply_systems_4:
@@ -369,14 +366,12 @@ def migrate_cea3_to_cea4(scenario):
             typology_path = path_to_input_file_without_db_3(scenario, 'typology')
             if os.path.exists(typology_path):
                 os.remove(typology_path)
-                print('typology.dbf has been removed as it is no longer needed by CEA-4.')
+                if verbose:
+                    print('- typology.dbf has been removed as it is no longer needed by CEA-4.')
 
 
-        #3. about the Database
-
-
-        # Print: End
-        print('-' * 49)
+        # # Print: End
+        # print('-' * 49)
 
 ## --------------------------------------------------------------------------------------------------------------------
 ## Main function
